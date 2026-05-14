@@ -1,0 +1,105 @@
+base de datos gestiona jugadores, bases, contenedores, items, bloques, biomas, encantamientos, comida y el historial de inventarios.
+Está compuesta por 17 tablas principales, con relaciones entre sí, claves únicas, índices y restricciones de integridad.
+
+🟩 Bases y miembros
+base
+Representa una base creada por jugadores.
+Campos: id, name (único), description, created_at, updated_at.
+
+base_member
+Jugadores que pertenecen a una base.
+Campos: id, base_id, player_id, role (owner/admin/member/viewer), invited_by, invited_at, accepted, accepted_at, invite_token, invite_expires_at, permissions_set, note.
+Relaciones:
+
+base_id → base
+
+player_id → player
+
+invited_by → player
+
+base_tag
+Etiquetas asociadas a una base.
+Campos: id, base_id, tag, scope, color.
+Relación: base_id → base.
+
+🟫 Jugadores y actividad
+player
+Jugador registrado.
+Campos: id, uuid (único), name, created_at.
+
+player_activity_log
+Registro de acciones realizadas por un jugador.
+Campos: id, player_id, action (fulltext), timestamp.
+Relación: player_id → player.
+
+🌍 Biomas y bloques
+biome
+Información de biomas.
+Campos: id, name (único), display_name, category, temperature, precipitation, depth, dimension, color, rainfall.
+
+block
+Bloques del juego.
+Campos: id, source_id (único), name (único), display_name, hardness, resistance, min_state_id, max_state_id, diggable, transparent, filter_light, emit_light, bounding_box, default_state, material, item_id, created_at.
+Relación: item_id → item.
+
+📦 Contenedores y almacenamiento
+container_type
+Tipos de contenedores (cofre, barril, shulker…).
+Campos: id, name (único), slots, description, icon.
+
+storage
+Instancias físicas de contenedores en el mundo.
+Campos: id, base_id, biome_id, x, y, z, container_type_id, created_at, updated_at.
+Relaciones:
+
+base_id → base
+
+biome_id → biome
+
+container_type_id → container_type
+Restricción única: (biome_id, x, y, z)
+
+storage_item
+Items almacenados dentro de un contenedor.
+Campos: id, storage_id, item_id, quantity, last_update.
+Relaciones:
+
+storage_id → storage
+
+item_id → item
+Restricción única: (storage_id, item_id)
+
+🧱 Items, comida y encantamientos
+item
+Items del juego.
+Campos: id, name (único), display_name, stack_size, max_durability, enchant_categories (JSON).
+
+food
+Información nutricional de comida.
+Campos: id, name (único), display_name, food_points, saturation, effective_quality, saturation_ratio.
+
+item_food
+Relación item ↔ food.
+Campos: id, item_id, food_id.
+Restricción única: (item_id, food_id).
+
+enchantment
+Encantamientos del juego.
+Campos: id, name (único), display_name, max_level, treasure_only, curse, category, weight, tradeable, discoverable, exclude (JSON).
+
+item_enchantment
+Relación item ↔ enchantment.
+Campos: id, item_id, enchantment_id, max_allowed_level.
+Restricción única: (item_id, enchantment_id).
+
+📜 Historial
+inventory_history
+Registro de cambios en inventarios.
+Campos: id, storage_id, item_id, old_quantity, new_quantity, change_reason, actor_id, change_type (enum), timestamp.
+Relaciones:
+
+storage_id → storage
+
+item_id → item
+
+actor_id → player
