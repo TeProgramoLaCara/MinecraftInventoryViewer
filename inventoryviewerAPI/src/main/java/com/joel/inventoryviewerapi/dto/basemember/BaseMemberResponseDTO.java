@@ -1,6 +1,7 @@
 package com.joel.inventoryviewerapi.dto.basemember;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -12,7 +13,9 @@ import lombok.AllArgsConstructor;
 public class BaseMemberResponseDTO {
 
     private Integer id;
-    private Integer baseId;      // en vez de BaseResponseDTO base
+    private Integer baseId;
+    private String baseName;
+    private List<com.joel.inventoryviewerapi.dto.basetag.BaseTagResponseDTO> baseTags;
     private Integer playerId;
     private String role;
     private Integer invitedById;

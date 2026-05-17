@@ -9,7 +9,8 @@ import com.joel.inventoryviewerapi.dto.base.BaseResponseDTO;
 
 @Mapper(componentModel = "spring", uses = {
         com.joel.inventoryviewerapi.mapper.basemember.BaseMemberMapper.class,
-        com.joel.inventoryviewerapi.mapper.basetag.BaseTagMapper.class
+        com.joel.inventoryviewerapi.mapper.basetag.BaseTagMapper.class,
+        com.joel.inventoryviewerapi.mapper.storage.StorageMapper.class
 })
 public interface BaseMapper {
 

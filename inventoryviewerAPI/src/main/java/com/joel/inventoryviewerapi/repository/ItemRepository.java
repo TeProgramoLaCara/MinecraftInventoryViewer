@@ -6,4 +6,6 @@ import java.util.List;
 
 public interface ItemRepository extends JpaRepository<Item, Integer> {
     List<Item> findByNameContainingIgnoreCaseOrDisplayNameContainingIgnoreCase(String name, String displayName);
+    boolean existsByName(String name);
+    java.util.Optional<Item> findByName(String name);
 }

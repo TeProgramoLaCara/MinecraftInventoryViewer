@@ -21,4 +21,8 @@ public class BiomeService {
     public Biome save(Biome entity) { return repository.save(entity); }
 
     public void delete(Integer id) { repository.deleteById(id); }
+
+    public java.util.Optional<Biome> findByName(String name) {
+        return repository.findByName(name);
+    }
 }

@@ -25,4 +25,8 @@ public class ItemService {
     public List<Item> search(String query) {
         return repository.findByNameContainingIgnoreCaseOrDisplayNameContainingIgnoreCase(query, query);
     }
+
+    public java.util.Optional<Item> findByName(String name) {
+        return repository.findByName(name);
+    }
 }

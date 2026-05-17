@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/base")
+@RequestMapping("/api/bases")
 public class BaseController {
 
     private final BaseService service;
@@ -23,7 +23,7 @@ public class BaseController {
         this.mapper = mapper;
     }
 
-    @GetMapping("/all")
+    @GetMapping
     public ResponseEntity<List<BaseResponseDTO>> getAll() {
         List<BaseResponseDTO> list = service.findAll().stream()
                 .map(mapper::toDTO)

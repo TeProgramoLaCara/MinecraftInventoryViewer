@@ -21,4 +21,8 @@ public class FoodService {
     public Food save(Food entity) { return repository.save(entity); }
 
     public void delete(Integer id) { repository.deleteById(id); }
+
+    public java.util.Optional<Food> findByName(String name) {
+        return repository.findByName(name);
+    }
 }

@@ -21,4 +21,8 @@ public class BlockService {
     public Block save(Block entity) { return repository.save(entity); }
 
     public void delete(Integer id) { repository.deleteById(id); }
+
+    public java.util.Optional<Block> findByName(String name) {
+        return repository.findByName(name);
+    }
 }

@@ -21,4 +21,8 @@ public class EnchantmentService {
     public Enchantment save(Enchantment entity) { return repository.save(entity); }
 
     public void delete(Integer id) { repository.deleteById(id); }
+
+    public java.util.Optional<Enchantment> findByName(String name) {
+        return repository.findByName(name);
+    }
 }

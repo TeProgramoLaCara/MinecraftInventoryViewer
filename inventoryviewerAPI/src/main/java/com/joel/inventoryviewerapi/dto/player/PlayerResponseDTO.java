@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import com.joel.inventoryviewerapi.dto.basemember.BaseMemberResponseDTO;
 import com.joel.inventoryviewerapi.dto.playeractivitylog.PlayerActivityLogResponseDTO;
 
 import lombok.Data;
@@ -20,5 +21,6 @@ public class PlayerResponseDTO {
     private LocalDateTime createdAt;
 
     private List<PlayerActivityLogResponseDTO> activityLogs;
+    private List<BaseMemberResponseDTO> memberships;
 }
 

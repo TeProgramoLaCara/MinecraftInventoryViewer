@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/item")
+@RequestMapping("/api/items")
 public class ItemController {
 
     private final ItemService service;
@@ -23,7 +23,7 @@ public class ItemController {
         this.mapper = mapper;
     }
 
-    @GetMapping("/all")
+    @GetMapping
     public ResponseEntity<List<ItemResponseDTO>> getAll() {
         return ResponseEntity.ok(service.findAll().stream().map(mapper::toDTO).collect(Collectors.toList()));
     }
@@ -33,6 +33,14 @@ public class ItemController {
         var e = service.findById(id);
         if (e == null) return ResponseEntity.notFound().build();
         return ResponseEntity.ok(mapper.toDTO(e));
+    }
+
+    @GetMapping("/name/{name}")
+    public ResponseEntity<ItemResponseDTO> getByName(@PathVariable String name) {
+        return service.findByName(name)
+                .map(mapper::toDTO)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/search")

@@ -5,6 +5,7 @@ import java.util.List;
 
 import com.joel.inventoryviewerapi.dto.basemember.BaseMemberResponseDTO;
 import com.joel.inventoryviewerapi.dto.basetag.BaseTagResponseDTO;
+import com.joel.inventoryviewerapi.dto.storage.StorageResponseDTO;
 
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -23,5 +24,6 @@ public class BaseResponseDTO {
 
     private List<BaseMemberResponseDTO> members;
     private List<BaseTagResponseDTO> tags;
+    private List<StorageResponseDTO> storages;
 }
 

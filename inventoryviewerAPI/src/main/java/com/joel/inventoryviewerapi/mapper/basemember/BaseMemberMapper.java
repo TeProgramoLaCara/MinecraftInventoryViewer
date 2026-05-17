@@ -6,10 +6,14 @@ import org.mapstruct.Mapping;
 import com.joel.inventoryviewerapi.entity.BaseMember;
 import com.joel.inventoryviewerapi.dto.basemember.BaseMemberResponseDTO;
 
-@Mapper(componentModel = "spring")
+@Mapper(componentModel = "spring", uses = {
+    com.joel.inventoryviewerapi.mapper.basetag.BaseTagMapper.class
+})
 public interface BaseMemberMapper {
 
     @Mapping(target = "baseId", source = "base.id")
+    @Mapping(target = "baseName", source = "base.name")
+    @Mapping(target = "baseTags", source = "base.tags")
     @Mapping(target = "playerId", source = "player.id")
     @Mapping(target = "invitedById", source = "invitedBy.id")
     BaseMemberResponseDTO toDto(BaseMember entity);

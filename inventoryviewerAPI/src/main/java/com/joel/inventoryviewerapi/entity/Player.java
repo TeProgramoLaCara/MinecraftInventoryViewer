@@ -26,6 +26,14 @@ public class Player {
     @OneToMany(mappedBy = "player", fetch = FetchType.LAZY)
     private List<PlayerActivityLog> activityLogs;
 
+    @OneToMany(mappedBy = "player", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<BaseMember> memberships;
+
     @OneToMany(mappedBy = "actor", fetch = FetchType.LAZY)
     private List<InventoryHistory> inventoryActions;
+
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = LocalDateTime.now();
+    }
 }
