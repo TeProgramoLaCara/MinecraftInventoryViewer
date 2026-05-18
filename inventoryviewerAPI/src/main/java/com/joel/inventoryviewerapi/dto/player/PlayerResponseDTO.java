@@ -19,6 +19,7 @@ public class PlayerResponseDTO {
     private String uuid;
     private String name;
     private LocalDateTime createdAt;
+    private Integer activeBaseId;
 
     private List<PlayerActivityLogResponseDTO> activityLogs;
     private List<BaseMemberResponseDTO> memberships;

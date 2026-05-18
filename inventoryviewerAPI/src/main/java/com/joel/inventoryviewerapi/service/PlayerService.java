@@ -25,4 +25,8 @@ public class PlayerService {
     public List<Player> search(String query) {
         return repository.findByNameContainingIgnoreCaseOrUuidContainingIgnoreCase(query, query);
     }
+
+    public java.util.Optional<Player> findByUuid(String uuid) {
+        return repository.findByUuid(uuid);
+    }
 }

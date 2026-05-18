@@ -7,7 +7,7 @@ import java.util.List;
 
 @Entity
 @Table(name = "storage", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"biome_id", "x", "y", "z"})
+        @UniqueConstraint(name = "ux_storage_coords", columnNames = {"base_id", "x", "y", "z"})
 })
 @Getter @Setter
 @NoArgsConstructor @AllArgsConstructor @Builder

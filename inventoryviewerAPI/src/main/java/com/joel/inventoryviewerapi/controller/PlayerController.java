@@ -56,6 +56,23 @@ public class PlayerController {
         return ResponseEntity.ok(mapper.toDTO(saved));
     }
 
+    @GetMapping("/uuid/{uuid}")
+    public ResponseEntity<PlayerResponseDTO> getByUuid(@PathVariable String uuid) {
+        return service.findByUuid(uuid)
+                .map(mapper::toDTO)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PutMapping("/{id}/active-base/{baseId}")
+    public ResponseEntity<PlayerResponseDTO> setActiveBase(@PathVariable Integer id, @PathVariable Integer baseId) {
+        var player = service.findById(id);
+        if (player == null) return ResponseEntity.notFound().build();
+        player.setActiveBaseId(baseId);
+        var saved = service.save(player);
+        return ResponseEntity.ok(mapper.toDTO(saved));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Integer id) {
         service.delete(id);

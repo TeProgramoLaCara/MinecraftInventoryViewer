@@ -58,6 +58,46 @@ public class InventoryApiClient {
                 .thenApply(response -> GSON.fromJson(response.body(), JsonObject.class));
     }
 
+    public static CompletableFuture<JsonObject> updateBase(int baseId, String name, String description) {
+        JsonObject json = new JsonObject();
+        json.addProperty("name", name);
+        json.addProperty("description", description);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(API_URL + "/bases/" + baseId))
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(GSON.toJson(json)))
+                .build();
+
+        return CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> GSON.fromJson(response.body(), JsonObject.class));
+    }
+
+    public static CompletableFuture<Void> deleteBase(int baseId) {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(API_URL + "/bases/" + baseId))
+                .DELETE()
+                .build();
+
+        return CLIENT.sendAsync(request, HttpResponse.BodyHandlers.discarding())
+                .thenApply(response -> null);
+    }
+
+    public static CompletableFuture<Void> unregisterStorage(int baseId, int x, int y, int z) {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(API_URL + "/storages/base/" + baseId + "/coords?x=" + x + "&y=" + y + "&z=" + z))
+                .DELETE()
+                .build();
+
+        return CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> {
+                    if (response.statusCode() >= 400) {
+                        throw new RuntimeException("HTTP " + response.statusCode() + ": " + response.body());
+                    }
+                    return null;
+                });
+    }
+
     public static CompletableFuture<JsonArray> searchPlayer(String name) {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(API_URL + "/players/search?query=" + name))
@@ -149,5 +189,63 @@ public class InventoryApiClient {
         HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url)).GET().build();
         return CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                 .thenApply(res -> GSON.fromJson(res.body(), JsonArray.class));
+    }
+
+    public static CompletableFuture<JsonObject> getPlayerByUuid(String uuid) {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(API_URL + "/players/uuid/" + uuid))
+                .GET()
+                .build();
+        return CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> {
+                    if (response.statusCode() == 404) return null;
+                    return GSON.fromJson(response.body(), JsonObject.class);
+                });
+    }
+
+    public static CompletableFuture<JsonObject> setActiveBase(int playerId, int baseId) {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(API_URL + "/players/" + playerId + "/active-base/" + baseId))
+                .PUT(HttpRequest.BodyPublishers.noBody())
+                .build();
+        return CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> GSON.fromJson(response.body(), JsonObject.class));
+    }
+
+    public static CompletableFuture<JsonArray> getStoragesByBaseId(int baseId) {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(API_URL + "/storages/base/" + baseId))
+                .GET()
+                .build();
+        return CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> GSON.fromJson(response.body(), JsonArray.class));
+    }
+
+    public static CompletableFuture<JsonObject> syncStorage(int baseId, int x, int y, int z, String type, String biome, JsonArray items) {
+        JsonObject json = new JsonObject();
+        json.addProperty("baseId", baseId);
+        json.addProperty("x", x);
+        json.addProperty("y", y);
+        json.addProperty("z", z);
+        json.addProperty("typeName", type);
+        json.addProperty("biomeName", biome);
+        json.add("items", items);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(API_URL + "/storages/sync"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(json)))
+                .build();
+
+        return CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> {
+                    if (response.statusCode() >= 400) {
+                        throw new RuntimeException("HTTP " + response.statusCode() + ": " + response.body());
+                    }
+                    if (response.body() == null || response.body().trim().isEmpty()) {
+                        return new JsonObject();
+                    }
+                    return GSON.fromJson(response.body(), JsonObject.class);
+                });
     }
 }

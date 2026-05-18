@@ -6,4 +6,5 @@ import java.util.List;
 
 public interface PlayerRepository extends JpaRepository<Player, Integer> {
     List<Player> findByNameContainingIgnoreCaseOrUuidContainingIgnoreCase(String name, String uuid);
+    java.util.Optional<Player> findByUuid(String uuid);
 }

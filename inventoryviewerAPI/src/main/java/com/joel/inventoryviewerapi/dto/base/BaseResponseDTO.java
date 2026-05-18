@@ -24,6 +24,5 @@ public class BaseResponseDTO {
 
     private List<BaseMemberResponseDTO> members;
     private List<BaseTagResponseDTO> tags;
-    private List<StorageResponseDTO> storages;
 }
 

@@ -23,6 +23,9 @@ public class Player {
 
     private LocalDateTime createdAt;
 
+    @Column(name = "active_base_id")
+    private Integer activeBaseId;
+
     @OneToMany(mappedBy = "player", fetch = FetchType.LAZY)
     private List<PlayerActivityLog> activityLogs;
 
