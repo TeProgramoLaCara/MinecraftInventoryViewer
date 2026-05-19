@@ -18,7 +18,12 @@ public class PlayerActivityLogService {
 
     public PlayerActivityLog findById(Integer id) { return repository.findById(id).orElse(null); }
 
-    public PlayerActivityLog save(PlayerActivityLog entity) { return repository.save(entity); }
+    public PlayerActivityLog save(PlayerActivityLog entity) {
+        if (entity.getTimestamp() == null) {
+            entity.setTimestamp(java.time.LocalDateTime.now());
+        }
+        return repository.save(entity);
+    }
 
     public void delete(Integer id) { repository.deleteById(id); }
 }

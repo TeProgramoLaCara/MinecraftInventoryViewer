@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/container-type")
+@RequestMapping("/api/container-types")
 public class ContainerTypeController {
 
     private final ContainerTypeService service;
@@ -23,7 +23,7 @@ public class ContainerTypeController {
         this.mapper = mapper;
     }
 
-    @GetMapping("/all")
+    @GetMapping
     public ResponseEntity<List<ContainerTypeResponseDTO>> getAll() {
         return ResponseEntity.ok(service.findAll().stream().map(mapper::toDTO).collect(Collectors.toList()));
     }

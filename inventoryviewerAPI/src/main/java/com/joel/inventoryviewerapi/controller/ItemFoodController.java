@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/item-food")
+@RequestMapping("/api/item-foods")
 public class ItemFoodController {
 
     private final ItemFoodService service;
@@ -23,7 +23,7 @@ public class ItemFoodController {
         this.mapper = mapper;
     }
 
-    @GetMapping("/all")
+    @GetMapping
     public ResponseEntity<List<ItemFoodResponseDTO>> getAll() {
         return ResponseEntity.ok(service.findAll().stream().map(mapper::toDTO).collect(Collectors.toList()));
     }

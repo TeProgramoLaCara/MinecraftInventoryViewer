@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/storage-item")
+@RequestMapping("/api/storage-items")
 public class StorageItemController {
 
     private final StorageItemService service;
@@ -23,7 +23,7 @@ public class StorageItemController {
         this.mapper = mapper;
     }
 
-    @GetMapping("/all")
+    @GetMapping
     public ResponseEntity<List<StorageItemResponseDTO>> getAll() {
         return ResponseEntity.ok(service.findAll().stream().map(mapper::toDTO).collect(Collectors.toList()));
     }

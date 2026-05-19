@@ -248,4 +248,24 @@ public class InventoryApiClient {
                     return GSON.fromJson(response.body(), JsonObject.class);
                 });
     }
+
+    public static CompletableFuture<JsonObject> logPlayerActivity(int playerId, String action) {
+        JsonObject json = new JsonObject();
+        json.addProperty("playerId", playerId);
+        json.addProperty("action", action);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(API_URL + "/player-activity-logs"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(json)))
+                .build();
+
+        return CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> {
+                    if (response.body() == null || response.body().trim().isEmpty()) {
+                        return new JsonObject();
+                    }
+                    return GSON.fromJson(response.body(), JsonObject.class);
+                });
+    }
 }

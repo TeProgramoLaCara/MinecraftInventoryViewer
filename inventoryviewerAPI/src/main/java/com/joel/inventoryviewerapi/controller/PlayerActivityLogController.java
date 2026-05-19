@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/player-activity-log")
+@RequestMapping("/api/player-activity-logs")
 public class PlayerActivityLogController {
 
     private final PlayerActivityLogService service;
@@ -23,7 +23,7 @@ public class PlayerActivityLogController {
         this.mapper = mapper;
     }
 
-    @GetMapping("/all")
+    @GetMapping
     public ResponseEntity<List<PlayerActivityLogResponseDTO>> getAll() {
         return ResponseEntity.ok(service.findAll().stream().map(mapper::toDTO).collect(Collectors.toList()));
     }

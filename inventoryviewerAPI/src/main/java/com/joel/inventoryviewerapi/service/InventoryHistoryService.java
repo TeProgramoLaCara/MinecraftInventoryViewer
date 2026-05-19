@@ -18,7 +18,12 @@ public class InventoryHistoryService {
 
     public InventoryHistory findById(Integer id) { return repository.findById(id).orElse(null); }
 
-    public InventoryHistory save(InventoryHistory entity) { return repository.save(entity); }
+    public InventoryHistory save(InventoryHistory entity) {
+        if (entity.getTimestamp() == null) {
+            entity.setTimestamp(java.time.LocalDateTime.now());
+        }
+        return repository.save(entity);
+    }
 
     public void delete(Integer id) { repository.deleteById(id); }
 }

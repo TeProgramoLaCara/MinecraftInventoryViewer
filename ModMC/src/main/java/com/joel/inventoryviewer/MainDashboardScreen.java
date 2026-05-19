@@ -55,13 +55,63 @@ public class MainDashboardScreen extends Screen {
 
     // Bases management state
     private EditBox baseNameEdit;
+    private EditBox baseDescEdit;
     private Button baseSaveBtn;
+    private Button baseCancelBtn;
     private Integer editingBaseId = null; // null = create new base
     private int baseItemPage = 0;
+    private JsonArray selectedBaseStorages = null;
+    private boolean confirmingDelete = false;
+    private boolean checkedRegistration = false;
 
     public MainDashboardScreen() {
         super(new TextComponent("Dashboard de Inventario"));
         refreshData();
+    }
+
+    private void checkPlayerRegistrationAndGiveWand() {
+        String playerName = Minecraft.getInstance().getUser().getName();
+        InventoryApiClient.searchPlayer(playerName).thenAccept(jsonArray -> {
+            Minecraft.getInstance().execute(() -> {
+                if (jsonArray.size() == 0) {
+                    String uuid = Minecraft.getInstance().getUser().getUuid();
+                    InventoryApiClient.createPlayer(playerName, uuid).thenAccept(newPlayer -> {
+                        Minecraft.getInstance().execute(() -> {
+                            if (!playerHasWand() && Minecraft.getInstance().player != null) {
+                                Minecraft.getInstance().player.chat("/give @s inventoryviewer:wand");
+                                Minecraft.getInstance().player.displayClientMessage(new net.minecraft.network.chat.TextComponent("§a[InventoryViewer] ¡Se te ha entregado la Varita de Inventario!"), false);
+                            }
+                            if (currentTab == Tab.PLAYER) {
+                                refreshData();
+                            }
+                        });
+                    });
+                }
+            });
+        });
+    }
+
+    private boolean playerHasWand() {
+        if (Minecraft.getInstance().player == null) return false;
+        for (ItemStack stack : Minecraft.getInstance().player.getInventory().items) {
+            if (!stack.isEmpty() && stack.getItem() instanceof WandItem) {
+                return true;
+            }
+        }
+        for (ItemStack stack : Minecraft.getInstance().player.getInventory().offhand) {
+            if (!stack.isEmpty() && stack.getItem() instanceof WandItem) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void fetchBaseStorages(int baseId) {
+        InventoryApiClient.getStoragesByBaseId(baseId).thenAccept(storages -> {
+            Minecraft.getInstance().execute(() -> {
+                this.selectedBaseStorages = storages;
+            });
+        });
     }
 
     private void refreshData() {
@@ -69,6 +119,9 @@ public class MainDashboardScreen extends Screen {
             InventoryApiClient.getBases().thenAccept(json -> {
                 Minecraft.getInstance().execute(() -> {
                     this.data = json;
+                    if (expandedBaseId != null && expandedBaseId != -1) {
+                        fetchBaseStorages(expandedBaseId);
+                    }
                 });
             });
         } else if (currentTab == Tab.PLAYER) {
@@ -103,6 +156,10 @@ public class MainDashboardScreen extends Screen {
 
     @Override
     protected void init() {
+        if (!checkedRegistration) {
+            checkedRegistration = true;
+            checkPlayerRegistrationAndGiveWand();
+        }
         int centerX = this.width / 2;
         this.basesBtn = new Button(centerX - 155, 10, 100, 20, new TextComponent("Bases"), b -> switchTab(Tab.BASES));
         this.catalogBtn = new Button(centerX - 50, 10, 100, 20, new TextComponent("Catálogo"), b -> switchTab(Tab.CATALOG));
@@ -137,16 +194,21 @@ public class MainDashboardScreen extends Screen {
         this.searchBox.setResponder(s -> { this.catalogPage = 0; this.scrollAmount = 0; });
         addRenderableWidget(this.searchBox);
 
-        // Bases Edit Box
-        this.baseNameEdit = new EditBox(this.font, PANEL_X + 10, PANEL_Y + 15, 120, 14, new TextComponent("Nombre Base"));
-        this.baseNameEdit.visible = (currentTab == Tab.BASES);
+        // Bases Edit Boxes
+        this.baseNameEdit = new EditBox(this.font, 0, 0, 150, 14, new TextComponent("Nombre Base"));
+        this.baseNameEdit.visible = false;
         addRenderableWidget(this.baseNameEdit);
 
-        this.baseSaveBtn = new Button(PANEL_X + 135, PANEL_Y + 12, 50, 20, new TextComponent("Guardar"), b -> {
+        this.baseDescEdit = new EditBox(this.font, 0, 0, 270, 14, new TextComponent("Descripción Base"));
+        this.baseDescEdit.visible = false;
+        addRenderableWidget(this.baseDescEdit);
+
+        this.baseSaveBtn = new Button(0, 0, 50, 20, new TextComponent("Guardar"), b -> {
             String name = baseNameEdit.getValue().trim();
+            String desc = baseDescEdit.getValue().trim();
             if (!name.isEmpty()) {
-                if (editingBaseId == null) {
-                    InventoryApiClient.createBase(name, "Creada desde Dashboard").thenAccept(baseJson -> {
+                if (editingBaseId == -1) {
+                    InventoryApiClient.createBase(name, desc).thenAccept(baseJson -> {
                         int baseId = baseJson.get("id").getAsInt();
                         String uuid = Minecraft.getInstance().player.getUUID().toString();
                         InventoryApiClient.getPlayerByUuid(uuid).thenAccept(p -> {
@@ -154,22 +216,54 @@ public class MainDashboardScreen extends Screen {
                                 int pId = p.get("id").getAsInt();
                                 InventoryApiClient.addMemberToBase(baseId, pId, "OWNER").join();
                                 InventoryApiClient.addTagToBase(baseId, "Principal", "SYSTEM", 0xFFFFFF).join();
+                                InventoryApiClient.logPlayerActivity(pId, "Creó la base '" + name + "' desde el menú principal").join();
                             }
-                            Minecraft.getInstance().execute(this::refreshData);
+                            Minecraft.getInstance().execute(() -> {
+                                expandedBaseId = baseId;
+                                editingBaseId = null;
+                                baseNameEdit.setValue("");
+                                baseNameEdit.visible = false;
+                                baseDescEdit.setValue("");
+                                baseDescEdit.visible = false;
+                                baseSaveBtn.visible = false;
+                                baseCancelBtn.visible = false;
+                                refreshData();
+                            });
                         });
                     });
-                } else {
-                    InventoryApiClient.updateBase(editingBaseId, name, "").thenAccept(res -> {
-                        Minecraft.getInstance().execute(this::refreshData);
+                } else if (editingBaseId != null) {
+                    InventoryApiClient.updateBase(editingBaseId, name, desc).thenAccept(res -> {
+                        Minecraft.getInstance().execute(() -> {
+                            editingBaseId = null;
+                            baseNameEdit.setValue("");
+                            baseNameEdit.visible = false;
+                            baseDescEdit.setValue("");
+                            baseDescEdit.visible = false;
+                            baseSaveBtn.visible = false;
+                            baseCancelBtn.visible = false;
+                            refreshData();
+                        });
                     });
-                    editingBaseId = null;
                 }
-                baseNameEdit.setValue("");
-                baseSaveBtn.setMessage(new TextComponent("Guardar"));
             }
         });
-        this.baseSaveBtn.visible = (currentTab == Tab.BASES);
+        this.baseSaveBtn.visible = false;
         addRenderableWidget(this.baseSaveBtn);
+
+        this.baseCancelBtn = new Button(0, 0, 55, 20, new TextComponent("Cancelar"), b -> {
+            editingBaseId = null;
+            if (expandedBaseId == -1) {
+                expandedBaseId = null;
+            }
+            baseNameEdit.setValue("");
+            baseNameEdit.visible = false;
+            baseDescEdit.setValue("");
+            baseDescEdit.visible = false;
+            baseSaveBtn.visible = false;
+            b.visible = false;
+        });
+        this.baseCancelBtn.visible = false;
+        addRenderableWidget(this.baseCancelBtn);
     }
 
     private void updateTabButtonLabels() {
@@ -191,23 +285,79 @@ public class MainDashboardScreen extends Screen {
         this.scrollAmount = 0;
         this.selectedCatalogItem = null;
         this.catalogPage = 0;
+        this.selectedBaseStorages = null;
         if (this.searchBox != null) {
             this.searchBox.visible = (tab == Tab.CATALOG);
             this.searchBox.setValue("");
         }
         if (this.baseNameEdit != null) {
-            this.baseNameEdit.visible = (tab == Tab.BASES);
+            this.baseNameEdit.visible = false;
             this.baseNameEdit.setValue("");
         }
+        if (this.baseDescEdit != null) {
+            this.baseDescEdit.visible = false;
+            this.baseDescEdit.setValue("");
+        }
         if (this.baseSaveBtn != null) {
-            this.baseSaveBtn.visible = (tab == Tab.BASES);
-            this.baseSaveBtn.setMessage(new TextComponent("Guardar"));
+            this.baseSaveBtn.visible = false;
+        }
+        if (this.baseCancelBtn != null) {
+            this.baseCancelBtn.visible = false;
         }
         editingBaseId = null;
         baseItemPage = 0;
+        confirmingDelete = false;
         updateTabButtonLabels();
         resetTagEditor();
         refreshData();
+    }
+
+    public void navigateToCatalogItem(String displayName) {
+        navigateToCategoryAndItem("items", displayName);
+    }
+
+    public void navigateToCategoryAndItem(String category, String displayName) {
+        this.currentTab = Tab.CATALOG;
+        this.selectedBaseStorages = null;
+        this.expandedBaseId = null;
+        this.scrollAmount = 0;
+        this.catalogPage = 0;
+        this.catalogCategory = category;
+        
+        if (this.searchBox != null) {
+            this.searchBox.visible = true;
+            this.searchBox.setValue(displayName);
+        }
+        if (this.baseNameEdit != null) this.baseNameEdit.visible = false;
+        if (this.baseDescEdit != null) this.baseDescEdit.visible = false;
+        if (this.baseSaveBtn != null) this.baseSaveBtn.visible = false;
+        if (this.baseCancelBtn != null) this.baseCancelBtn.visible = false;
+        
+        updateTabButtonLabels();
+        resetTagEditor();
+        
+        InventoryApiClient.getCatalog(category).thenAccept(json -> {
+            Minecraft.getInstance().execute(() -> {
+                this.data = json;
+                this.scrollAmount = 0;
+                this.catalogPage = 0;
+                
+                this.selectedCatalogItem = null;
+                for (JsonElement el : json) {
+                    JsonObject itemObj = el.getAsJsonObject();
+                    String dName = itemObj.has("displayName") && !itemObj.get("displayName").isJsonNull() 
+                        ? itemObj.get("displayName").getAsString() : "";
+                    if (dName.equalsIgnoreCase(displayName)) {
+                        this.selectedCatalogItem = itemObj;
+                        break;
+                    }
+                }
+                
+                if (this.selectedCatalogItem == null && json.size() > 0) {
+                    this.selectedCatalogItem = json.get(0).getAsJsonObject();
+                }
+            });
+        });
     }
 
     private void resetTagEditor() {
@@ -240,6 +390,13 @@ public class MainDashboardScreen extends Screen {
             }
             return this.baseNameEdit.keyPressed(keyCode, scanCode, modifiers);
         }
+        if (this.baseDescEdit != null && this.baseDescEdit.isFocused()) {
+            if (keyCode == 256) { // ESC key
+                this.onClose();
+                return true;
+            }
+            return this.baseDescEdit.keyPressed(keyCode, scanCode, modifiers);
+        }
         if (this.tagEdit != null && this.tagEdit.isFocused()) {
             if (keyCode == 256) { // ESC key
                 this.onClose();
@@ -247,8 +404,8 @@ public class MainDashboardScreen extends Screen {
             }
             return this.tagEdit.keyPressed(keyCode, scanCode, modifiers);
         }
-        // Cerrar la GUI si no se está escribiendo y se presiona la tecla 'B'
-        if (keyCode == 66) { // 'B' key (GLFW_KEY_B)
+        // Cerrar la GUI si no se está escribiendo y se presiona la tecla 'B' o 'E'
+        if (keyCode == 66 || keyCode == 69) { // 'B' (66) or 'E' (69)
             this.onClose();
             return true;
         }
@@ -360,6 +517,12 @@ public class MainDashboardScreen extends Screen {
         
         int leftW = 160;
         int rightX = PANEL_X + leftW + 10;
+
+        // [+] Crear Nueva Base
+        boolean isCreating = (expandedBaseId != null && expandedBaseId == -1);
+        fill(poseStack, x, y, x + leftW - 10, y + 16, isCreating ? 0x6655FF55 : 0x2255FF55);
+        drawString(poseStack, font, "✚ Crear Nueva Base", x + 5, y + 4, isCreating ? 0xFF55FF55 : 0xAA55FF55);
+        y += 18;
         
         for (JsonElement e : data) {
             JsonObject base = e.getAsJsonObject();
@@ -376,7 +539,34 @@ public class MainDashboardScreen extends Screen {
 
         com.mojang.blaze3d.systems.RenderSystem.disableScissor();
 
-        if (expandedBaseId != null) {
+        int ry = PANEL_Y + 10;
+        if (expandedBaseId == null) {
+            drawString(poseStack, font, "§7Selecciona una base a la izquierda para ver su inventario", rightX, ry, 0xFFFFFF);
+            if (baseNameEdit != null) baseNameEdit.visible = false;
+            if (baseDescEdit != null) baseDescEdit.visible = false;
+            if (baseSaveBtn != null) baseSaveBtn.visible = false;
+            if (baseCancelBtn != null) baseCancelBtn.visible = false;
+        } else if (expandedBaseId == -1) {
+            drawString(poseStack, font, "§6§lCrear Nueva Base", rightX, ry, 0xFFFFFF);
+            if (baseNameEdit != null && baseDescEdit != null && baseSaveBtn != null && baseCancelBtn != null) {
+                baseNameEdit.x = rightX;
+                baseNameEdit.y = ry + 16;
+                baseNameEdit.visible = true;
+                
+                baseDescEdit.x = rightX;
+                baseDescEdit.y = ry + 34;
+                baseDescEdit.visible = true;
+
+                baseSaveBtn.x = rightX;
+                baseSaveBtn.y = ry + 52;
+                baseSaveBtn.setMessage(new TextComponent("Crear"));
+                baseSaveBtn.visible = true;
+                
+                baseCancelBtn.x = rightX + 55;
+                baseCancelBtn.y = ry + 52;
+                baseCancelBtn.visible = true;
+            }
+        } else {
             JsonObject selectedBase = null;
             for (JsonElement e : data) {
                 if (e.getAsJsonObject().get("id").getAsInt() == expandedBaseId) {
@@ -384,81 +574,155 @@ public class MainDashboardScreen extends Screen {
                     break;
                 }
             }
+            
             if (selectedBase != null) {
-                int ry = PANEL_Y + 10;
-                drawString(poseStack, font, "§6§l" + selectedBase.get("name").getAsString(), rightX, ry, 0xFFFFFF);
+                String baseName = selectedBase.get("name").getAsString();
                 
-                int btnY = ry + 20;
-                boolean hoverEdit = mouseX >= rightX && mouseX < rightX + 50 && mouseY >= btnY && mouseY < btnY + 14;
-                fill(poseStack, rightX, btnY, rightX + 50, btnY + 14, hoverEdit ? 0x66FFFFFF : 0x44FFFFFF);
-                drawString(poseStack, font, "Editar", rightX + 10, btnY + 3, 0xFFFFFF);
+                if (editingBaseId != null && editingBaseId.equals(expandedBaseId)) {
+                    drawString(poseStack, font, "§6§lEditar Base: " + baseName, rightX, ry, 0xFFFFFF);
+                    if (baseNameEdit != null && baseDescEdit != null && baseSaveBtn != null && baseCancelBtn != null) {
+                        baseNameEdit.x = rightX;
+                        baseNameEdit.y = ry + 16;
+                        baseNameEdit.visible = true;
+                        
+                        baseDescEdit.x = rightX;
+                        baseDescEdit.y = ry + 34;
+                        baseDescEdit.visible = true;
 
-                boolean hoverDel = mouseX >= rightX + 60 && mouseX < rightX + 110 && mouseY >= btnY && mouseY < btnY + 14;
-                fill(poseStack, rightX + 60, btnY, rightX + 110, btnY + 14, hoverDel ? 0x66FF5555 : 0x44FF5555);
-                drawString(poseStack, font, "Borrar", rightX + 70, btnY + 3, 0xFFFFFF);
-                
-                ry = btnY + 25;
-                drawString(poseStack, font, "§eInventario Agrupado:", rightX, ry, 0xFFFFFF);
-                ry += 15;
-                
-                java.util.Map<String, Integer> itemsAgg = new java.util.HashMap<>();
-                if (selectedBase.has("storages")) {
-                    for (JsonElement s : selectedBase.getAsJsonArray("storages")) {
-                        JsonObject st = s.getAsJsonObject();
-                        if (st.has("items")) {
-                            for (JsonElement it : st.getAsJsonArray("items")) {
-                                JsonObject itemObj = it.getAsJsonObject();
-                                String dName = itemObj.getAsJsonObject("item").get("displayName").getAsString();
-                                int qty = itemObj.get("quantity").getAsInt();
-                                itemsAgg.put(dName, itemsAgg.getOrDefault(dName, 0) + qty);
+                        baseSaveBtn.x = rightX;
+                        baseSaveBtn.y = ry + 52;
+                        baseSaveBtn.setMessage(new TextComponent("Act."));
+                        baseSaveBtn.visible = true;
+                        
+                        baseCancelBtn.x = rightX + 55;
+                        baseCancelBtn.y = ry + 52;
+                        baseCancelBtn.visible = true;
+                    }
+                } else {
+                    if (baseNameEdit != null) baseNameEdit.visible = false;
+                    if (baseDescEdit != null) baseDescEdit.visible = false;
+                    if (baseSaveBtn != null) baseSaveBtn.visible = false;
+                    if (baseCancelBtn != null) baseCancelBtn.visible = false;
+                    
+                    drawString(poseStack, font, "§6§l" + baseName, rightX, ry, 0xFFFFFF);
+                    String desc = selectedBase.has("description") && !selectedBase.get("description").isJsonNull()
+                        ? selectedBase.get("description").getAsString() : "";
+                    if (!desc.isEmpty()) {
+                        ry += 12;
+                        drawString(poseStack, font, "§7" + desc, rightX, ry, 0xFFFFFF);
+                    }
+                    
+                    int btnY = ry + 20;
+                    if (confirmingDelete) {
+                        drawString(poseStack, font, "§c¿Eliminar base?", rightX, btnY + 3, 0xFFFFFF);
+                        
+                        boolean hoverYes = mouseX >= rightX + 90 && mouseX < rightX + 110 && mouseY >= btnY && mouseY < btnY + 14;
+                        fill(poseStack, rightX + 90, btnY, rightX + 110, btnY + 14, hoverYes ? 0x6655FF55 : 0x4455FF55);
+                        drawString(poseStack, font, "SÍ", rightX + 94, btnY + 3, 0xFFFFFF);
+
+                        boolean hoverNo = mouseX >= rightX + 115 && mouseX < rightX + 135 && mouseY >= btnY && mouseY < btnY + 14;
+                        fill(poseStack, rightX + 115, btnY, rightX + 135, btnY + 14, hoverNo ? 0x66FF5555 : 0x44FF5555);
+                        drawString(poseStack, font, "NO", rightX + 119, btnY + 3, 0xFFFFFF);
+                    } else {
+                        boolean hoverEdit = mouseX >= rightX && mouseX < rightX + 50 && mouseY >= btnY && mouseY < btnY + 14;
+                        fill(poseStack, rightX, btnY, rightX + 50, btnY + 14, hoverEdit ? 0x66FFFFFF : 0x44FFFFFF);
+                        drawString(poseStack, font, "Editar", rightX + 10, btnY + 3, 0xFFFFFF);
+
+                        boolean hoverDel = mouseX >= rightX + 60 && mouseX < rightX + 110 && mouseY >= btnY && mouseY < btnY + 14;
+                        fill(poseStack, rightX + 60, btnY, rightX + 110, btnY + 14, hoverDel ? 0x66FF5555 : 0x44FF5555);
+                        drawString(poseStack, font, "Borrar", rightX + 70, btnY + 3, 0xFFFFFF);
+                    }
+                    
+                    ry = btnY + 25;
+                    drawString(poseStack, font, "§eInventario Agrupado:", rightX, ry, 0xFFFFFF);
+                    ry += 15;
+                    
+                    java.util.Map<String, Integer> itemsAgg = new java.util.HashMap<>();
+                    if (selectedBaseStorages != null) {
+                        for (JsonElement s : selectedBaseStorages) {
+                            JsonObject st = s.getAsJsonObject();
+                            if (st.has("items") && st.get("items").isJsonArray()) {
+                                for (JsonElement it : st.getAsJsonArray("items")) {
+                                    JsonObject itemObj = it.getAsJsonObject();
+                                    if (itemObj.has("item") && !itemObj.get("item").isJsonNull()) {
+                                        JsonObject nestedItem = itemObj.getAsJsonObject("item");
+                                        String dName = nestedItem.has("displayName") && !nestedItem.get("displayName").isJsonNull()
+                                            ? nestedItem.get("displayName").getAsString() : "";
+                                        int qty = itemObj.has("quantity") ? itemObj.get("quantity").getAsInt() : 0;
+                                        if (!dName.isEmpty() && qty > 0) {
+                                            itemsAgg.put(dName, itemsAgg.getOrDefault(dName, 0) + qty);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
-                }
-                
-                if (itemsAgg.isEmpty()) {
-                    drawString(poseStack, font, "§7No hay ítems.", rightX, ry, 0xFFFFFF);
-                } else {
-                    java.util.List<java.util.Map.Entry<String, Integer>> list = new java.util.ArrayList<>(itemsAgg.entrySet());
-                    int totalItems = list.size();
-                    int itemsPerPage = 10;
-                    int startIdx = baseItemPage * itemsPerPage;
-                    int endIdx = Math.min(startIdx + itemsPerPage, totalItems);
                     
-                    for (int i = startIdx; i < endIdx; i++) {
-                        java.util.Map.Entry<String, Integer> entry = list.get(i);
-                        drawString(poseStack, font, "x" + entry.getValue() + " " + entry.getKey(), rightX, ry, 0x55FFFF);
-                        ry += 12;
-                    }
-                    
-                    if (totalItems > itemsPerPage) {
-                        int pgY = PANEL_Y + height - 70;
-                        fill(poseStack, rightX, pgY, rightX + 20, pgY + 14, 0x44FFFFFF);
-                        drawString(poseStack, font, "<-", rightX + 4, pgY + 3, 0xFFFFFF);
+                    if (selectedBaseStorages == null) {
+                        drawString(poseStack, font, "§7Cargando ítems...", rightX, ry, 0xFFFFFF);
+                    } else if (itemsAgg.isEmpty()) {
+                        drawString(poseStack, font, "§7No hay ítems.", rightX, ry, 0xFFFFFF);
+                    } else {
+                        java.util.List<java.util.Map.Entry<String, Integer>> list = new java.util.ArrayList<>(itemsAgg.entrySet());
+                        int totalItems = list.size();
+                        int itemsPerPage = 10;
+                        int startIdx = baseItemPage * itemsPerPage;
+                        int endIdx = Math.min(startIdx + itemsPerPage, totalItems);
                         
-                        fill(poseStack, rightX + 30, pgY, rightX + 50, pgY + 14, 0x44FFFFFF);
-                        drawString(poseStack, font, "->", rightX + 34, pgY + 3, 0xFFFFFF);
+                        for (int i = startIdx; i < endIdx; i++) {
+                            java.util.Map.Entry<String, Integer> entry = list.get(i);
+                            boolean isHovered = mouseX >= rightX && mouseX < rightX + 180 && mouseY >= ry && mouseY < ry + 11;
+                            drawString(poseStack, font, (isHovered ? "§n" : "") + "x" + entry.getValue() + " " + entry.getKey(), rightX, ry, isHovered ? 0xFFAA00 : 0x55FFFF);
+                            ry += 12;
+                        }
+                        
+                        if (totalItems > itemsPerPage) {
+                            int pgY = PANEL_Y + height - 70;
+                            fill(poseStack, rightX, pgY, rightX + 20, pgY + 14, 0x44FFFFFF);
+                            drawString(poseStack, font, "<-", rightX + 4, pgY + 3, 0xFFFFFF);
+                            
+                            fill(poseStack, rightX + 30, pgY, rightX + 50, pgY + 14, 0x44FFFFFF);
+                            drawString(poseStack, font, "->", rightX + 34, pgY + 3, 0xFFFFFF);
+                        }
                     }
                 }
             }
         }
     }
 
-    private void renderCatalog(PoseStack poseStack, int x, int y, int mouseX, int mouseY) {
-        int startY = y;
-        int listWidth = selectedCatalogItem != null ? (width - 30) - 160 : (width - 50);
-
-        // Filtrado local en el cliente por buscador
+    private java.util.List<JsonObject> getFilteredCatalog() {
         java.util.List<JsonObject> filtered = new java.util.ArrayList<>();
+        if (data == null) return filtered;
         String query = searchBox != null ? searchBox.getValue().trim().toLowerCase() : "";
+        java.util.Map<String, JsonObject> uniqueItems = new java.util.LinkedHashMap<>();
         for (JsonElement el : data) {
             JsonObject item = el.getAsJsonObject();
             String name = item.has("name") && !item.get("name").isJsonNull() ? item.get("name").getAsString() : "";
             String dName = item.has("displayName") && !item.get("displayName").isJsonNull() ? item.get("displayName").getAsString() : "";
             if (query.isEmpty() || name.toLowerCase().contains(query) || dName.toLowerCase().contains(query)) {
-                filtered.add(item);
+                String key = name.toLowerCase();
+                if (uniqueItems.containsKey(key)) {
+                    JsonObject existingItem = uniqueItems.get(key);
+                    String existingName = existingItem.has("name") && !existingItem.get("name").isJsonNull() ? existingItem.get("name").getAsString() : "";
+                    ItemStack existingStack = getStackFromTechnicalName("minecraft:" + existingName.toLowerCase());
+                    ItemStack newStack = getStackFromTechnicalName("minecraft:" + key);
+                    if (existingStack.getItem() == Items.BARRIER && newStack.getItem() != Items.BARRIER) {
+                        uniqueItems.put(key, item);
+                    }
+                } else {
+                    uniqueItems.put(key, item);
+                }
             }
         }
+        filtered.addAll(uniqueItems.values());
+        return filtered;
+    }
+
+    private void renderCatalog(PoseStack poseStack, int x, int y, int mouseX, int mouseY) {
+        int startY = y;
+        int listWidth = selectedCatalogItem != null ? (width - 30) - 160 : (width - 50);
+
+        java.util.List<JsonObject> filtered = getFilteredCatalog();
 
         int totalItems = filtered.size();
         int startIdx = catalogPage * ITEMS_PER_PAGE;
@@ -587,6 +851,34 @@ public class MainDashboardScreen extends Screen {
                     infoY += 12;
                 }
             }
+            
+            // Botones de navegación cruzada premium en la parte inferior de la barra lateral
+            if (catalogCategory.equals("items")) {
+                boolean isBlock = stack.getItem() instanceof net.minecraft.world.item.BlockItem;
+                boolean isFood = stack.getItem().isEdible();
+                int btnW = 135;
+                int btnH = 14;
+                int bx = pX + 5;
+                int by = PANEL_Y + height - 60 - 18;
+                
+                if (isBlock) {
+                    boolean hoverNav = mouseX >= bx && mouseX < bx + btnW && mouseY >= by && mouseY < by + btnH;
+                    fill(poseStack, bx, by, bx + btnW, by + btnH, hoverNav ? 0x6655FFFF : 0x3355FFFF);
+                    drawCenteredString(poseStack, font, "§b§l[ Ver Bloque ]", bx + btnW / 2, by + 3, 0xFFFFFF);
+                } else if (isFood) {
+                    boolean hoverNav = mouseX >= bx && mouseX < bx + btnW && mouseY >= by && mouseY < by + btnH;
+                    fill(poseStack, bx, by, bx + btnW, by + btnH, hoverNav ? 0x66FFAA00 : 0x33FFAA00);
+                    drawCenteredString(poseStack, font, "§6§l[ Ver Comida ]", bx + btnW / 2, by + 3, 0xFFFFFF);
+                }
+            } else if (catalogCategory.equals("blocks") || catalogCategory.equals("food")) {
+                int btnW = 135;
+                int btnH = 14;
+                int bx = pX + 5;
+                int by = PANEL_Y + height - 60 - 18;
+                boolean hoverNav = mouseX >= bx && mouseX < bx + btnW && mouseY >= by && mouseY < by + btnH;
+                fill(poseStack, bx, by, bx + btnW, by + btnH, hoverNav ? 0x66FF55FF : 0x33FF55FF);
+                drawCenteredString(poseStack, font, "§d§l[ Ver Ítem ]", bx + btnW / 2, by + 3, 0xFFFFFF);
+            }
         }
     }
 
@@ -630,7 +922,7 @@ public class MainDashboardScreen extends Screen {
         y += 20;
         drawString(poseStack, font, "§6Tus Bases:", x, y, 0xFFFFFF);
         y += 18;
-        if (p.has("memberships")) {
+        if (p.has("memberships") && p.get("memberships").isJsonArray()) {
             for (JsonElement m : p.getAsJsonArray("memberships")) {
                 JsonObject member = m.getAsJsonObject();
                 int bId = member.get("baseId").getAsInt();
@@ -640,7 +932,7 @@ public class MainDashboardScreen extends Screen {
                 if (expandedBaseId != null && expandedBaseId == bId) {
                     y += 18;
                     int tagX = x + 10;
-                    if (member.has("baseTags")) {
+                    if (member.has("baseTags") && member.get("baseTags").isJsonArray()) {
                         for (JsonElement t : member.getAsJsonArray("baseTags")) {
                             JsonObject tag = t.getAsJsonObject();
                             int tId = tag.get("id").getAsInt();
@@ -713,42 +1005,156 @@ public class MainDashboardScreen extends Screen {
         if (currentTab == Tab.BASES) {
             int y = PANEL_Y + 40 - (int)scrollAmount;
             int leftW = 160;
+
+            // Click [+] Crear Nueva Base
+            if (mouseX >= x && mouseX < x + leftW - 10 && mouseY >= y && mouseY < y + 16) {
+                expandedBaseId = -1;
+                editingBaseId = -1;
+                confirmingDelete = false;
+                baseNameEdit.setValue("");
+                baseNameEdit.setFocus(true);
+                resetTagEditor();
+                return true;
+            }
+            y += 18;
+
             for (JsonElement e : data) {
                 int id = e.getAsJsonObject().get("id").getAsInt();
                 if (mouseX >= x && mouseX < x + leftW - 10 && mouseY >= y && mouseY < y + 16) { 
                     expandedBaseId = id; 
+                    editingBaseId = null;
+                    confirmingDelete = false;
                     baseItemPage = 0;
+                    selectedBaseStorages = null;
                     resetTagEditor();
+                    fetchBaseStorages(id);
                     return true; 
                 }
                 y += 18;
             }
             
-            if (expandedBaseId != null) {
+            if (expandedBaseId != null && expandedBaseId != -1 && (editingBaseId == null || !editingBaseId.equals(expandedBaseId))) {
                 int rightX = PANEL_X + leftW + 10;
                 int ry = PANEL_Y + 10;
+                
+                JsonObject selectedBase = null;
+                for (JsonElement e : data) {
+                    if (e.getAsJsonObject().get("id").getAsInt() == expandedBaseId) {
+                        selectedBase = e.getAsJsonObject();
+                        break;
+                    }
+                }
+                
+                if (selectedBase != null) {
+                    String desc = selectedBase.has("description") && !selectedBase.get("description").isJsonNull()
+                        ? selectedBase.get("description").getAsString() : "";
+                    if (!desc.isEmpty()) {
+                        ry += 12;
+                    }
+                }
+                
                 int btnY = ry + 20;
                 
                 if (mouseY >= btnY && mouseY < btnY + 14) {
-                    if (mouseX >= rightX && mouseX < rightX + 50) {
-                        editingBaseId = expandedBaseId;
-                        for (JsonElement e : data) {
-                            if (e.getAsJsonObject().get("id").getAsInt() == expandedBaseId) {
-                                baseNameEdit.setValue(e.getAsJsonObject().get("name").getAsString());
-                                break;
+                    if (confirmingDelete) {
+                        if (mouseX >= rightX + 90 && mouseX < rightX + 110) {
+                            int baseIdToDelete = expandedBaseId;
+                            confirmingDelete = false;
+                            InventoryApiClient.deleteBase(baseIdToDelete).thenAccept(res -> {
+                                Minecraft.getInstance().execute(() -> {
+                                    if (com.joel.inventoryviewer.SelectionHandler.activeBaseId != null && com.joel.inventoryviewer.SelectionHandler.activeBaseId.equals(baseIdToDelete)) {
+                                        com.joel.inventoryviewer.SelectionHandler.activeBaseId = null;
+                                        com.joel.inventoryviewer.SelectionHandler.activeBaseName = null;
+                                        com.joel.inventoryviewer.SelectionHandler.ACTIVE_BASE_STORAGES.clear();
+                                    }
+                                    expandedBaseId = null;
+                                    editingBaseId = null;
+                                    refreshData();
+                                });
+                            });
+                            return true;
+                        }
+                        if (mouseX >= rightX + 115 && mouseX < rightX + 135) {
+                            confirmingDelete = false;
+                            return true;
+                        }
+                    } else {
+                        if (mouseX >= rightX && mouseX < rightX + 50) {
+                            editingBaseId = expandedBaseId;
+                            for (JsonElement e : data) {
+                                if (e.getAsJsonObject().get("id").getAsInt() == expandedBaseId) {
+                                    baseNameEdit.setValue(e.getAsJsonObject().get("name").getAsString());
+                                    String desc = e.getAsJsonObject().has("description") && !e.getAsJsonObject().get("description").isJsonNull()
+                                        ? e.getAsJsonObject().get("description").getAsString() : "";
+                                    baseDescEdit.setValue(desc);
+                                    baseNameEdit.setFocus(true);
+                                    break;
+                                }
+                            }
+                            return true;
+                        }
+                        if (mouseX >= rightX + 60 && mouseX < rightX + 110) {
+                            confirmingDelete = true;
+                            return true;
+                        }
+                    }
+                }
+                
+                // Click on aggregated items to view in catalog
+                JsonObject selectedBaseObj = null;
+                for (JsonElement e : data) {
+                    if (e.getAsJsonObject().get("id").getAsInt() == expandedBaseId) {
+                        selectedBaseObj = e.getAsJsonObject();
+                        break;
+                    }
+                }
+                if (selectedBaseObj != null) {
+                    int ryItem = PANEL_Y + 10;
+                    String desc = selectedBaseObj.has("description") && !selectedBaseObj.get("description").isJsonNull()
+                        ? selectedBaseObj.get("description").getAsString() : "";
+                    if (!desc.isEmpty()) {
+                        ryItem += 12;
+                    }
+                    int btnYItem = ryItem + 20;
+                    int itemsStartY = btnYItem + 25 + 15;
+                    
+                    java.util.Map<String, Integer> itemsAgg = new java.util.HashMap<>();
+                    if (selectedBaseStorages != null) {
+                        for (JsonElement s : selectedBaseStorages) {
+                            JsonObject st = s.getAsJsonObject();
+                            if (st.has("items") && st.get("items").isJsonArray()) {
+                                for (JsonElement it : st.getAsJsonArray("items")) {
+                                    JsonObject itemObj = it.getAsJsonObject();
+                                    if (itemObj.has("item") && !itemObj.get("item").isJsonNull()) {
+                                        JsonObject nestedItem = itemObj.getAsJsonObject("item");
+                                        String dName = nestedItem.has("displayName") && !nestedItem.get("displayName").isJsonNull()
+                                            ? nestedItem.get("displayName").getAsString() : "";
+                                        int qty = itemObj.has("quantity") ? itemObj.get("quantity").getAsInt() : 0;
+                                        if (!dName.isEmpty() && qty > 0) {
+                                            itemsAgg.put(dName, itemsAgg.getOrDefault(dName, 0) + qty);
+                                        }
+                                    }
+                                }
                             }
                         }
-                        baseSaveBtn.setMessage(new TextComponent("Act."));
-                        return true;
                     }
-                    if (mouseX >= rightX + 60 && mouseX < rightX + 110) {
-                        InventoryApiClient.deleteBase(expandedBaseId).thenAccept(res -> {
-                            Minecraft.getInstance().execute(() -> {
-                                expandedBaseId = null;
-                                refreshData();
-                            });
-                        });
-                        return true;
+                    
+                    if (selectedBaseStorages != null && !itemsAgg.isEmpty()) {
+                        java.util.List<java.util.Map.Entry<String, Integer>> list = new java.util.ArrayList<>(itemsAgg.entrySet());
+                        int totalItems = list.size();
+                        int itemsPerPage = 10;
+                        int startIdx = baseItemPage * itemsPerPage;
+                        int endIdx = Math.min(startIdx + itemsPerPage, totalItems);
+                        
+                        int itemY = itemsStartY;
+                        for (int i = startIdx; i < endIdx; i++) {
+                            java.util.Map.Entry<String, Integer> entry = list.get(i);
+                            if (mouseX >= rightX && mouseX < rightX + 180 && mouseY >= itemY && mouseY < itemY + 11) {
+                                navigateToCatalogItem(entry.getKey());
+                                return true;
+                            }
+                            itemY += 12;
+                        }
                     }
                 }
                 
@@ -791,16 +1197,7 @@ public class MainDashboardScreen extends Screen {
                 }
                 if (mouseX >= pgX + 55 && mouseX < pgX + 70) {
                     // Paginación calculada en base al filtro del buscador
-                    java.util.List<JsonObject> filtered = new java.util.ArrayList<>();
-                    String query = searchBox != null ? searchBox.getValue().trim().toLowerCase() : "";
-                    for (JsonElement el : data) {
-                        JsonObject item = el.getAsJsonObject();
-                        String name = item.has("name") && !item.get("name").isJsonNull() ? item.get("name").getAsString() : "";
-                        String dName = item.has("displayName") && !item.get("displayName").isJsonNull() ? item.get("displayName").getAsString() : "";
-                        if (query.isEmpty() || name.toLowerCase().contains(query) || dName.toLowerCase().contains(query)) {
-                            filtered.add(item);
-                        }
-                    }
+                    java.util.List<JsonObject> filtered = getFilteredCatalog();
                     int totalPages = (int) Math.ceil((double) filtered.size() / ITEMS_PER_PAGE);
                     if (catalogPage < totalPages - 1) { catalogPage++; scrollAmount = 0; selectedCatalogItem = null; }
                     return true;
@@ -810,16 +1207,7 @@ public class MainDashboardScreen extends Screen {
             // Listado de clics (desplazado a PANEL_Y + 42 por el buscador)
             int y = (int) (PANEL_Y + 42 - scrollAmount);
             
-            java.util.List<JsonObject> filtered = new java.util.ArrayList<>();
-            String query = searchBox != null ? searchBox.getValue().trim().toLowerCase() : "";
-            for (JsonElement el : data) {
-                JsonObject item = el.getAsJsonObject();
-                String name = item.has("name") && !item.get("name").isJsonNull() ? item.get("name").getAsString() : "";
-                String dName = item.has("displayName") && !item.get("displayName").isJsonNull() ? item.get("displayName").getAsString() : "";
-                if (query.isEmpty() || name.toLowerCase().contains(query) || dName.toLowerCase().contains(query)) {
-                    filtered.add(item);
-                }
-            }
+            java.util.List<JsonObject> filtered = getFilteredCatalog();
 
             int totalItems = filtered.size();
             int startIdx = catalogPage * ITEMS_PER_PAGE;
@@ -834,6 +1222,36 @@ public class MainDashboardScreen extends Screen {
                 }
                 y += 22;
             }
+
+            if (selectedCatalogItem != null) {
+                int pX = PANEL_X + width - 30 - 150;
+                String name = selectedCatalogItem.has("name") && !selectedCatalogItem.get("name").isJsonNull() ? selectedCatalogItem.get("name").getAsString() : "";
+                String dName = selectedCatalogItem.has("displayName") && !selectedCatalogItem.get("displayName").isJsonNull() ? selectedCatalogItem.get("displayName").getAsString() : name;
+                String techName = "minecraft:" + name.toLowerCase();
+                ItemStack stack = getStackFromTechnicalName(techName);
+                
+                int btnW = 135;
+                int btnH = 14;
+                int bx = pX + 5;
+                int by = PANEL_Y + height - 60 - 18;
+                
+                if (mouseX >= bx && mouseX < bx + btnW && mouseY >= by && mouseY < by + btnH) {
+                    if (catalogCategory.equals("items")) {
+                        boolean isBlock = stack.getItem() instanceof net.minecraft.world.item.BlockItem;
+                        boolean isFood = stack.getItem().isEdible();
+                        if (isBlock) {
+                            navigateToCategoryAndItem("blocks", dName);
+                            return true;
+                        } else if (isFood) {
+                            navigateToCategoryAndItem("food", dName);
+                            return true;
+                        }
+                    } else if (catalogCategory.equals("blocks") || catalogCategory.equals("food")) {
+                        navigateToCategoryAndItem("items", dName);
+                        return true;
+                    }
+                }
+            }
         } else if (currentTab == Tab.PLAYER && data.size() > 0) {
             int y = drawY;
             JsonObject p = data.get(0).getAsJsonObject();
@@ -841,32 +1259,35 @@ public class MainDashboardScreen extends Screen {
             if (p.has("activityLogs") && p.get("activityLogs").isJsonArray()) y += Math.min(p.getAsJsonArray("activityLogs").size(), 3) * 12;
             else y += 12;
             y += 20; y += 18;
-            for (JsonElement m : p.getAsJsonArray("memberships")) {
+            if (p.has("memberships") && p.get("memberships").isJsonArray()) {
+                for (JsonElement m : p.getAsJsonArray("memberships")) {
                 JsonObject member = m.getAsJsonObject();
                 int bId = member.get("baseId").getAsInt();
                 if (mouseY >= y && mouseY < y + 12) { expandedBaseId = (expandedBaseId != null && expandedBaseId == bId) ? null : bId; resetTagEditor(); return true; }
                 if (expandedBaseId != null && expandedBaseId == bId) {
                     y += 18;
                     int tagX = x + 10;
-                    for (JsonElement t : member.getAsJsonArray("baseTags")) {
-                        JsonObject tag = t.getAsJsonObject();
-                        int tId = tag.get("id").getAsInt();
-                        int nameW = font.width(tag.get("tag").getAsString()) + 2; // Fixed tag text size mapping
-                        int tagW = nameW + (tagIdToDelete != null && tagIdToDelete == tId ? 55 : 35);
-                        if (tagX + tagW > width - 50) { tagX = x + 10; y += 14; }
-                        if (tagIdToDelete != null && tagIdToDelete == tId) {
-                            if (mouseX >= tagX + nameW + 5 && mouseX < tagX + tagW && mouseY >= y && mouseY < y + 10) {
-                                InventoryApiClient.deleteTag(tId).thenAccept(v -> Minecraft.getInstance().execute(() -> { refreshData(); resetTagEditor(); })); return true;
+                    if (member.has("baseTags") && member.get("baseTags").isJsonArray()) {
+                        for (JsonElement t : member.getAsJsonArray("baseTags")) {
+                            JsonObject tag = t.getAsJsonObject();
+                            int tId = tag.get("id").getAsInt();
+                            int nameW = font.width(tag.get("tag").getAsString()) + 2;
+                            int tagW = nameW + (tagIdToDelete != null && tagIdToDelete == tId ? 55 : 35);
+                            if (tagX + tagW > width - 50) { tagX = x + 10; y += 14; }
+                            if (tagIdToDelete != null && tagIdToDelete == tId) {
+                                if (mouseX >= tagX + nameW + 5 && mouseX < tagX + tagW && mouseY >= y && mouseY < y + 10) {
+                                    InventoryApiClient.deleteTag(tId).thenAccept(v -> Minecraft.getInstance().execute(() -> { refreshData(); resetTagEditor(); })); return true;
+                                }
+                            } else {
+                                if (mouseX >= tagX + nameW + 5 && mouseX < tagX + nameW + 18 && mouseY >= y && mouseY < y + 10) {
+                                    activeBaseForTag = bId; editingTagId = tId; tagEdit.setValue(tag.get("tag").getAsString()); tagEdit.setFocus(true); return true;
+                                }
+                                if (mouseX >= tagX + nameW + 20 && mouseX < tagX + nameW + 33 && mouseY >= y && mouseY < y + 10) {
+                                    tagIdToDelete = tId; return true;
+                                }
                             }
-                        } else {
-                            if (mouseX >= tagX + nameW + 5 && mouseX < tagX + nameW + 18 && mouseY >= y && mouseY < y + 10) {
-                                activeBaseForTag = bId; editingTagId = tId; tagEdit.setValue(tag.get("tag").getAsString()); tagEdit.setFocus(true); return true;
-                            }
-                            if (mouseX >= tagX + nameW + 20 && mouseX < tagX + nameW + 33 && mouseY >= y && mouseY < y + 10) {
-                                tagIdToDelete = tId; return true;
-                            }
+                            tagX += tagW + 10;
                         }
-                        tagX += tagW + 10;
                     }
                     y += 20;
                     if (mouseX >= x + 10 && mouseX < x + 120 && mouseY >= y && mouseY < y + 12) {
@@ -890,6 +1311,7 @@ public class MainDashboardScreen extends Screen {
                     y += 10;
                 }
                 y += 20;
+            }
             }
         }
         tagIdToDelete = null;

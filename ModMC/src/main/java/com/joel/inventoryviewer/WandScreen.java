@@ -75,6 +75,9 @@ public class WandScreen extends Screen {
                 // Add default principal tag
                 InventoryApiClient.addTagToBase(baseId, "Principal", "SYSTEM", 0xFFFFFF).join();
                 
+                // Log activity in database
+                InventoryApiClient.logPlayerActivity(playerId, "Creó la base '" + name + "' desde la varita").join();
+                
                 // Set as active
                 InventoryApiClient.setActiveBase(playerId, baseId).join();
                 SelectionHandler.activeBaseId = baseId;
@@ -97,13 +100,15 @@ public class WandScreen extends Screen {
                 BaseInfo base = bases.get(idx);
                 final int finalBaseId = base.id;
                 final String finalBaseName = base.name;
+                boolean isActive = SelectionHandler.activeBaseId != null && SelectionHandler.activeBaseId == base.id;
 
-                // Add "Activar" button if not already active
-                if (SelectionHandler.activeBaseId == null || SelectionHandler.activeBaseId != base.id) {
-                    this.addRenderableWidget(new Button(centerX + 30, centerY - 15 + i * 22, 70, 16, new TextComponent("Activar"), button -> {
-                        setActiveBase(finalBaseId, finalBaseName);
-                    }));
+                Button actBtn = new Button(centerX + 30, centerY - 15 + i * 22, 70, 16, new TextComponent(isActive ? "Activa" : "Activar"), button -> {
+                    setActiveBase(finalBaseId, finalBaseName);
+                });
+                if (isActive) {
+                    actBtn.active = false;
                 }
+                this.addRenderableWidget(actBtn);
             }
         }
 
@@ -236,7 +241,6 @@ public class WandScreen extends Screen {
 
                 if (isActive) {
                     drawString(poseStack, this.font, "§6§l▶ " + base.name, x + 12, itemY, 0xFFFFFF);
-                    drawString(poseStack, this.font, "§a§l[ACTIVA]", centerX + 30, itemY, 0xFFFFFF);
                 } else {
                     drawString(poseStack, this.font, "§7- " + base.name, x + 12, itemY, 0xFFFFFF);
                 }
@@ -250,6 +254,22 @@ public class WandScreen extends Screen {
         }
 
         super.render(poseStack, mouseX, mouseY, partialTick);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (this.nameEdit != null && this.nameEdit.isFocused()) {
+            if (keyCode == 256) { // ESC key
+                this.onClose();
+                return true;
+            }
+            return this.nameEdit.keyPressed(keyCode, scanCode, modifiers);
+        }
+        if (keyCode == 69) { // 'E' key
+            this.onClose();
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
